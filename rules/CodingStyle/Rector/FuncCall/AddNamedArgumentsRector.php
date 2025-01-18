@@ -95,7 +95,7 @@ final class AddNamedArgumentsRector extends AbstractRector
             return [];
         }
 
-        if (!$classReflection->hasMethod($methodName)) {
+        if (! $classReflection->hasMethod($methodName)) {
             return [];
         }
 
@@ -103,7 +103,8 @@ final class AddNamedArgumentsRector extends AbstractRector
         $scope = $node->getAttribute(AttributeKey::SCOPE);
         $methodReflection = $classReflection->getMethod($methodName, $scope);
 
-        return $methodReflection->getOnlyVariant()->getParameters();
+        return $methodReflection->getOnlyVariant()
+            ->getParameters();
     }
 
     /**
@@ -118,7 +119,7 @@ final class AddNamedArgumentsRector extends AbstractRector
         }
         $methodName = $name->name;
 
-        if (!$callerType->hasMethod($methodName)->yes()) {
+        if (! $callerType->hasMethod($methodName)->yes()) {
             return [];
         }
 
@@ -126,7 +127,8 @@ final class AddNamedArgumentsRector extends AbstractRector
         $scope = $node->getAttribute(AttributeKey::SCOPE);
         $methodReflection = $callerType->getMethod($methodName, $scope);
 
-        return $methodReflection->getOnlyVariant()->getParameters();
+        return $methodReflection->getOnlyVariant()
+            ->getParameters();
     }
 
     private function resolveCalledName(Node $node): ?string
