@@ -17,7 +17,7 @@ final class MergeDateTimePropertyTypeDeclarationRectorTest extends AbstractRecto
     }
 
     /**
-     * @return Iterator<string>
+     * @return Iterator<mixed, array<int, string>>
      */
     public static function provideData(): Iterator
     {

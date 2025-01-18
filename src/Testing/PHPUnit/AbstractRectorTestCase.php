@@ -125,6 +125,9 @@ abstract class AbstractRectorTestCase extends AbstractLazyTestCase implements Re
         }
     }
 
+    /**
+     * @return Iterator<array<int, string>>
+     */
     protected static function yieldFilesFromDirectory(string $directory, string $suffix = '*.php.inc'): Iterator
     {
         return FixtureFileFinder::yieldDirectory($directory, $suffix);

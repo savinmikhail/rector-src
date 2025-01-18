@@ -11,18 +11,22 @@ use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
-use PHPStan\Reflection\ParameterReflectionWithPhpDocs;
+use PHPStan\Reflection\ClassMemberAccessAnswerer;
+use PHPStan\Reflection\ExtendedParameterReflection;
 use PHPStan\Reflection\ReflectionProvider;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
-use const PHP_VERSION_ID;
 
+/**
+ * @see \Rector\Tests\CodingStyle\Rector\FuncCall\AddNamedArgumentsRector\AddNamedArgumentsRectorTest
+ */
 final class AddNamedArgumentsRector extends AbstractRector
 {
-    public function __construct(private readonly ReflectionProvider $reflectionProvider)
-    {
+    public function __construct(
+        private readonly ReflectionProvider $reflectionProvider
+    ) {
     }
 
     public function getRuleDefinition(): RuleDefinition
@@ -37,21 +41,18 @@ final class AddNamedArgumentsRector extends AbstractRector
         return [FuncCall::class, StaticCall::class, MethodCall::class, New_::class];
     }
 
-    public function refactor(Node $node): ?Node
+    public function refactor(Node $node): Node
     {
-        if (PHP_VERSION_ID < 80000) {
-            return null;
-        }
-
         $parameters = $this->getParameters($node);
+
+        /** @var FuncCall|StaticCall|MethodCall|New_ $node */
         $this->addNamesToArgs($node, $parameters);
 
         return $node;
     }
 
     /**
-     * @param Node $node
-     * @return ParameterReflectionWithPhpDocs[]
+     * @return ExtendedParameterReflection[]
      */
     private function getParameters(Node $node): array
     {
@@ -71,12 +72,10 @@ final class AddNamedArgumentsRector extends AbstractRector
     }
 
     /**
-     * @return ParameterReflectionWithPhpDocs[]
+     * @return ExtendedParameterReflection[]
      */
     private function getStaticMethodArgs(StaticCall $node): array
     {
-        $namespaceAnswerer = $node->getAttribute(AttributeKey::SCOPE);
-
         if (! $node->class instanceof Name) {
             return [];
         }
@@ -87,28 +86,45 @@ final class AddNamedArgumentsRector extends AbstractRector
         }
 
         $classReflection = $this->reflectionProvider->getClass($className);
-        if (! $classReflection->hasMethod($node->name->toString())) {
+
+        if ($node->name instanceof Identifier) {
+            $methodName = $node->name->name;
+        } elseif ($node->name instanceof Name) {
+            $methodName = (string) $node->name;
+        } else {
             return [];
         }
 
-        $methodReflection = $classReflection->getMethod($node->name->toString(), $namespaceAnswerer);
+        if (!$classReflection->hasMethod($methodName)) {
+            return [];
+        }
+
+        /** @var ClassMemberAccessAnswerer $scope */
+        $scope = $node->getAttribute(AttributeKey::SCOPE);
+        $methodReflection = $classReflection->getMethod($methodName, $scope);
 
         return $methodReflection->getOnlyVariant()->getParameters();
     }
 
     /**
-     * @return ParameterReflectionWithPhpDocs[]
+     * @return ExtendedParameterReflection[]
      */
     private function getMethodArgs(MethodCall $node): array
     {
-        $namespaceAnswerer = $node->getAttribute(AttributeKey::SCOPE);
-
         $callerType = $this->nodeTypeResolver->getType($node->var);
-        if (! $callerType->hasMethod($node->name->toString())) {
+        $name = $node->name;
+        if ($name instanceof Node\Expr) {
+            return [];
+        }
+        $methodName = $name->name;
+
+        if (!$callerType->hasMethod($methodName)->yes()) {
             return [];
         }
 
-        $methodReflection = $callerType->getMethod($node->name->toString(), $namespaceAnswerer);
+        /** @var ClassMemberAccessAnswerer $scope */
+        $scope = $node->getAttribute(AttributeKey::SCOPE);
+        $methodReflection = $callerType->getMethod($methodName, $scope);
 
         return $methodReflection->getOnlyVariant()->getParameters();
     }
@@ -135,7 +151,7 @@ final class AddNamedArgumentsRector extends AbstractRector
     }
 
     /**
-     * @return ParameterReflectionWithPhpDocs[]
+     * @return ExtendedParameterReflection[]
      */
     private function getConstructorArgs(New_ $node): array
     {
@@ -155,37 +171,41 @@ final class AddNamedArgumentsRector extends AbstractRector
 
         $constructorReflection = $classReflection->getConstructor();
 
-        return $constructorReflection->getOnlyVariant()->getParameters();
+        return $constructorReflection->getOnlyVariant()
+            ->getParameters();
     }
 
     /**
-     * @return ParameterReflectionWithPhpDocs[]
+     * @return ExtendedParameterReflection[]
      */
     private function getFuncArgs(FuncCall $node): array
     {
-        $namespaceAnswerer = $node->getAttribute(AttributeKey::SCOPE);
-
         $calledName = $this->resolveCalledName($node);
         if ($calledName === null) {
             return [];
         }
 
-        if (! $this->reflectionProvider->hasFunction(new Name($calledName), $namespaceAnswerer)) {
+        $scope = $node->getAttribute(AttributeKey::SCOPE);
+
+        if (! $this->reflectionProvider->hasFunction(new Name($calledName), $scope)) {
             return [];
         }
-        $reflection = $this->reflectionProvider->getFunction(new Name($calledName), $namespaceAnswerer);
+        $reflection = $this->reflectionProvider->getFunction(new Name($calledName), $scope);
 
-        return $reflection->getOnlyVariant()->getParameters();
+        return $reflection->getOnlyVariant()
+            ->getParameters();
     }
 
     /**
-     * @param ParameterReflectionWithPhpDocs[] $parameters
+     * @param ExtendedParameterReflection[] $parameters
      */
-    private function addNamesToArgs(Node $node, array $parameters): void
+    private function addNamesToArgs(FuncCall|StaticCall|MethodCall|New_ $node, array $parameters): void
     {
-        /** @var FuncCall|StaticCall|MethodCall|New_ $node */
         foreach ($node->args as $index => $arg) {
             if (! isset($parameters[$index])) {
+                return;
+            }
+            if ($arg instanceof Node\VariadicPlaceholder) {
                 return;
             }
             $arg->name = new Identifier($parameters[$index]->getName());

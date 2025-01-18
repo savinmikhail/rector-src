@@ -17,7 +17,7 @@ final class TernaryEmptyArrayArrayDimFetchToCoalesceRectorTest extends AbstractR
     }
 
     /**
-     * @return Iterator<string>
+     * @return Iterator<mixed, array<int, string>>
      */
     public static function provideData(): Iterator
     {
